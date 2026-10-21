@@ -11,16 +11,34 @@ class Config:
     """Base application configuration."""
     SECRET_KEY = os.environ.get('SECRET_KEY', 'default-dev-secret-key-change-in-production')
     
-    # Database Configuration (Ensures consistent absolute path across all working directories)
+    # Instance Directory Handling (Handles read-only filesystems in serverless environments like Vercel)
     INSTANCE_DIR = basedir / 'instance'
-    INSTANCE_DIR.mkdir(exist_ok=True)
+    try:
+        INSTANCE_DIR.mkdir(exist_ok=True)
+    except OSError:
+        INSTANCE_DIR = Path('/tmp') / 'instance'
+        try:
+            INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
     
-    default_db_path = f"sqlite:///{ (INSTANCE_DIR / 'feedback.db').as_posix() }"
-    env_db = os.environ.get('DATABASE_URL')
-    if env_db and not env_db.endswith('feedback.db'):
+    # Database Configuration
+    # Supports DATABASE_URL or POSTGRES_URL (e.g. Vercel Postgres, Supabase, Neon)
+    env_db = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
+    if env_db and (env_db.startswith('postgresql://') or env_db.startswith('postgres://')):
+        # SQLAlchemy 1.4+ / 2.0+ requires 'postgresql://' instead of legacy 'postgres://'
+        if env_db.startswith('postgres://'):
+            env_db = env_db.replace('postgres://', 'postgresql://', 1)
+        SQLALCHEMY_DATABASE_URI = env_db
+    elif env_db and not env_db.endswith('feedback.db'):
         SQLALCHEMY_DATABASE_URI = env_db
     else:
-        SQLALCHEMY_DATABASE_URI = default_db_path
+        # Default local SQLite path, falling back to /tmp if running on Vercel
+        if os.environ.get('VERCEL') == '1':
+            SQLALCHEMY_DATABASE_URI = f"sqlite:///{ (Path('/tmp') / 'feedback.db').as_posix() }"
+        else:
+            SQLALCHEMY_DATABASE_URI = f"sqlite:///{ (INSTANCE_DIR / 'feedback.db').as_posix() }"
+            
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Security and Session Cookie Settings
