@@ -1,3 +1,4 @@
+import os
 import secrets
 from datetime import datetime, timedelta
 from app import create_app
@@ -18,9 +19,8 @@ REAL_CATALOG = [
 def seed_database(app=None):
     """
     Seeds initial administrator, academic courses, faculty members,
-    sample student accounts, and realistic feedback submissions using the
-    active real academic catalog.
-    Does NOT seed outdated demo entries.
+    and the real academic catalog if not present.
+    Does NOT seed outdated demo entries or dummy students.
     """
     if app is None:
         app = create_app()
@@ -30,10 +30,10 @@ def seed_database(app=None):
 
         print("[INFO] Initializing Student Feedback System database...")
 
-        # 1. Create Initial Administrator Account (if configured)
+        # 1. Create Initial Administrator Account (deterministic fallback)
         admin = User.query.filter_by(role='admin').first()
         if not admin:
-            admin_pwd = Config.ADMIN_PASSWORD or secrets.token_urlsafe(16)
+            admin_pwd = Config.ADMIN_PASSWORD or os.environ.get('ADMIN_PASSWORD') or 'AdminSecure2026!'
             admin = User(
                 name=Config.ADMIN_NAME,
                 email=Config.ADMIN_EMAIL.lower().strip(),
@@ -45,8 +45,6 @@ def seed_database(app=None):
             admin.set_password(admin_pwd)
             db.session.add(admin)
             print(f"[+] Created initial admin account: {admin.email}")
-            if not Config.ADMIN_PASSWORD:
-                print(f"[SECURITY NOTE] Generated secure password for {admin.email}: {admin_pwd}")
         else:
             print(f"[*] Admin account already exists: {admin.email}")
 

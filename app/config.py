@@ -45,7 +45,11 @@ class Config:
     
     # Database Configuration
     # Supports DATABASE_URL or POSTGRES_URL (e.g. Vercel Postgres, Supabase, Neon)
-    env_db = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
+    env_db = (
+        os.environ.get('DATABASE_URL')
+        or os.environ.get('POSTGRES_URL')
+        or os.environ.get('POSTGRES_PRISMA_URL')
+    )
     if env_db and (env_db.startswith('postgresql://') or env_db.startswith('postgres://')):
         # SQLAlchemy 1.4+ / 2.0+ requires 'postgresql://' instead of legacy 'postgres://'
         if env_db.startswith('postgres://'):
@@ -62,6 +66,12 @@ class Config:
             SQLALCHEMY_DATABASE_URI = f"sqlite:///{ (INSTANCE_DIR / 'feedback.db').as_posix() }"
             
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # Connection Pool Settings for Serverless PostgreSQL & SQLite
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
     
     # Security and Session Cookie Settings
     SESSION_COOKIE_HTTPONLY = True

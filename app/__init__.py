@@ -28,9 +28,12 @@ def create_app(config_class=Config):
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            return db.session.get(User, int(user_id))
+            user = db.session.get(User, int(user_id))
+            if user is None:
+                app.logger.warning(f"[SESSION] User loader: User ID {user_id} not found in current database instance.")
+            return user
         except Exception as e:
-            app.logger.warning(f"user_loader failed: {e}")
+            app.logger.error(f"[SESSION ERROR] User loader failed for ID {user_id}: {e}")
             return None
 
     # Register Blueprints
