@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Faculty - Campus Voice{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+  
+  <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+    <div>
+      <h3 class="fw-bold mb-1">Faculty Management</h3>
+      <p class="text-muted small mb-0">Add, edit, review performance, or toggle active status of academic faculty members.</p>
+    </div>
+    <div>
+      <button type="button" class="btn btn-primary d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addFacultyModal">
+        <i class="bi bi-person-plus-fill"></i> Add Faculty Member
+      </button>
+    </div>
+  </div>
+
+  <!-- Faculty Table -->
+  <div class="card card-academic">
+    <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+      <span class="d-flex align-items-center gap-2">
+        <i class="bi bi-people-fill text-primary"></i> Faculty Directory
+      </span>
+      <span class="badge bg-secondary">{{ faculties|length }} Faculty Members</span>
+    </div>
+    <div class="card-body p-0">
+      {% if faculties %}
+        <div class="table-responsive">
+          <table class="table table-academic mb-0">
+            <thead>
+              <tr>
+                <th>Faculty Name</th>
+                <th>Department</th>
+                <th>Assigned Subjects</th>
+                <th>Email Address</th>
+                <th>Average Rating</th>
+                <th>Reviews</th>
+                <th>Status</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in faculties %}
+                <tr>
+                  <td>
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="rounded-circle bg-light d-flex align-items-center justify-content-center text-primary fw-bold" style="width: 36px; height: 36px;">
+                        {{ f.faculty_name[:1] }}
+                      </div>
+                      <div>
+                        <strong>{{ f.faculty_name }}</strong>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ f.department }}</td>
+                  <td>
+                    {% set assigned = f.assigned_courses.all() %}
+                    {% if assigned %}
+                      <div class="d-flex flex-wrap gap-1">
+                        {% for ac in assigned %}
+                          <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="{{ ac.course_name }}">
+                            {{ ac.course_code }}
+                          </span>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span class="text-muted fst-italic small">None</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if f.email %}
+                      <code>{{ f.email }}</code>
+                    {% else %}
+                      <span class="text-muted fst-italic small">Not provided</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% set avg = f.average_rating() %}
+                    {% if f.feedback_count() > 0 %}
+                      <span class="badge-rating badge-rating-{{ avg|round|int }}">
+                        <span>{{ avg }}★</span>
+                      </span>
+                    {% else %}
+                      <span class="badge bg-light text-muted border">No ratings</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span class="badge bg-secondary-subtle text-secondary">{{ f.feedback_count() }}</span>
+                  </td>
+                  <td>
+                    {% if f.is_active %}
+                      <span class="badge bg-success-subtle text-success">Active</span>
+                    {% else %}
+                      <span class="badge bg-danger-subtle text-danger">Deactivated</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end text-nowrap">
+                    <a href="{{ url_for('admin.faculty_edit', id=f.id) }}" class="btn btn-outline-primary btn-sm me-1" title="Edit Faculty">
+                      <i class="bi bi-pencil"></i> Edit
+                    </a>
+                    <form method="POST" action="{{ url_for('admin.faculty_toggle', id=f.id) }}" class="d-inline">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      {% if f.is_active %}
+                        <button type="submit" class="btn btn-outline-danger btn-sm" data-confirm="Are you sure you want to deactivate {{ f.faculty_name }}?" title="Deactivate Faculty">
+                          <i class="bi bi-person-x"></i> Deactivate
+                        </button>
+                      {% else %}
+                        <button type="submit" class="btn btn-outline-success btn-sm" title="Activate Faculty">
+                          <i class="bi bi-person-check"></i> Activate
+                        </button>
+                      {% endif %}
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i class="bi bi-person-x empty-state-icon"></i>
+          <h5 class="empty-state-title">No Faculty Members Found</h5>
+          <p class="empty-state-text">Start by adding your institution's professors and instructors.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Add Faculty Modal -->
+<div class="modal fade" id="addFacultyModal" tabindex="-1" aria-labelledby="addFacultyModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header border-bottom">
+        <h5 class="modal-title fw-bold" id="addFacultyModalLabel">
+          <i class="bi bi-person-plus text-primary me-2"></i> Add Faculty Member
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('admin.faculty_list') }}" novalidate>
+        <div class="modal-body p-4">
+          {{ form.hidden_tag() }}
+
+          <div class="mb-3">
+            <label for="faculty_name" class="form-label">{{ form.faculty_name.label.text }}</label>
+            {{ form.faculty_name(class="form-control" + (" is-invalid" if form.faculty_name.errors else ""), id="faculty_name", placeholder="e.g. Dr. Jane Goodall") }}
+            {% for error in form.faculty_name.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="department" class="form-label">{{ form.department.label.text }}</label>
+            {{ form.department(class="form-select" + (" is-invalid" if form.department.errors else ""), id="department") }}
+            {% for error in form.department.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="email" class="form-label">{{ form.email.label.text }}</label>
+            {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), id="email", placeholder="faculty.member@university.edu") }}
+            {% for error in form.email.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+            <div class="form-text">Optional. Leave blank if official email is not yet available.</div>
+          </div>
+
+          <div class="form-check">
+            {{ form.is_active(class="form-check-input", id="is_active") }}
+            <label class="form-check-label" for="is_active">
+              Mark as Active (Available for student evaluations)
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer border-top">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Faculty Member</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

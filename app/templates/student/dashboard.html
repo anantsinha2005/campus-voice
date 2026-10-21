@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block title %}Student Dashboard - Campus Voice{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+
+  <!-- Welcome Banner -->
+  <div class="card card-academic mb-4 border-0 bg-primary text-white p-4 shadow-sm" style="background: linear-gradient(135deg, #4338ca 0%, #312e81 100%);">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+      <div>
+        <span class="badge bg-white text-primary mb-2 text-uppercase fw-semibold px-2 py-1">Campus Voice &bull; Student Portal</span>
+        <h2 class="fw-bold mb-1">Welcome, {{ student.name }}</h2>
+        <p class="mb-0 text-white-50">
+          <i class="bi bi-card-heading me-1"></i> ID: <strong>{{ student.student_id }}</strong> &nbsp;|&nbsp;
+          <i class="bi bi-building me-1"></i> {{ student.department }} &nbsp;|&nbsp;
+          <i class="bi bi-envelope me-1"></i> {{ student.email }}
+        </p>
+      </div>
+      <div>
+        <a href="{{ url_for('student.submit_feedback') }}" class="btn btn-light text-primary fw-bold shadow-sm d-flex align-items-center gap-2 px-3 py-2">
+          <i class="bi bi-pencil-square"></i> Submit Evaluation
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metric Stat Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="stat-card">
+        <div class="stat-icon primary">
+          <i class="bi bi-chat-heart-fill"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ total_submitted }}</div>
+          <div class="stat-label">Evaluations Submitted</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="stat-card">
+        <div class="stat-icon success">
+          <i class="bi bi-journal-check"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ courses|length }}</div>
+          <div class="stat-label">Active Academic Courses</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="stat-card">
+        <div class="stat-icon info">
+          <i class="bi bi-person-badge-fill"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ faculties|length }}</div>
+          <div class="stat-label">Faculty Instructors</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Available Courses to Review -->
+  <div class="card card-academic mb-4">
+    <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+      <span class="d-flex align-items-center gap-2">
+        <i class="bi bi-collection-fill text-primary"></i> Available Academic Courses
+      </span>
+      <span class="badge bg-secondary">{{ courses|length }} Courses</span>
+    </div>
+    <div class="card-body p-3">
+      {% if courses %}
+        <div class="row g-3">
+          {% for course in courses %}
+            <div class="col-12 col-md-6 col-lg-4">
+              <div class="card h-100 border border-light-subtle rounded-3 shadow-none p-3 bg-light bg-opacity-50">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="badge bg-primary-subtle text-primary fw-bold">{{ course.course_code }}</span>
+                  <span class="badge bg-success-subtle text-success small">Active</span>
+                </div>
+                <h6 class="fw-bold text-dark mb-1">{{ course.course_name }} ({{ course.course_code }})</h6>
+                <p class="text-secondary small mb-1">
+                  <i class="bi bi-person-video3 me-1 text-primary"></i> <strong>Faculty:</strong> {{ course.assigned_faculty.faculty_name if course.assigned_faculty else 'Faculty Assigned' }}
+                </p>
+                <p class="text-muted small mb-3">
+                  <i class="bi bi-building"></i> {{ course.department }}
+                </p>
+                <div class="mt-auto">
+                  <a href="{{ url_for('student.submit_feedback', course_id=course.id, faculty_id=course.faculty_id) }}" class="btn btn-outline-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1">
+                    <i class="bi bi-pencil"></i> Review Subject
+                  </a>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i class="bi bi-journal-x empty-state-icon"></i>
+          <h5 class="empty-state-title">No Active Courses Found</h5>
+          <p class="empty-state-text">There are currently no active courses listed in the curriculum.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Recent Submissions Section -->
+  <div class="card card-academic">
+    <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+      <span class="d-flex align-items-center gap-2">
+        <i class="bi bi-clock-history text-primary"></i> Your Recent Submissions
+      </span>
+      {% if feedbacks %}
+        <a href="{{ url_for('student.feedback_history') }}" class="btn btn-sm btn-outline-secondary">
+          View All Submissions ({{ total_submitted }})
+        </a>
+      {% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if feedbacks %}
+        <div class="table-responsive">
+          <table class="table table-academic mb-0">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Course</th>
+                <th>Faculty</th>
+                <th>Rating</th>
+                <th>Feedback Comments</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fb in feedbacks %}
+                <tr>
+                  <td class="text-nowrap text-muted small">
+                    <i class="bi bi-calendar3 me-1"></i> {{ fb.created_at.strftime('%b %d, %Y') }}
+                  </td>
+                  <td>
+                    <strong>{{ fb.course.course_code }}</strong><br>
+                    <span class="text-muted small">{{ fb.course.course_name }}</span>
+                  </td>
+                  <td>
+                    <strong>{{ fb.faculty.faculty_name }}</strong><br>
+                    <span class="text-muted small">{{ fb.faculty.department }}</span>
+                  </td>
+                  <td>
+                    <span class="badge-rating badge-rating-{{ fb.rating }}">
+                      <span>{{ fb.rating }}★</span>
+                      <span class="small text-muted">({{ fb.rating_label }})</span>
+                    </span>
+                  </td>
+                  <td>
+                    <span class="text-dark small">{{ fb.comments|truncate(90) if fb.comments else '<span class="text-muted fst-italic">No written comments</span>'|safe }}</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i class="bi bi-chat-square-dots empty-state-icon"></i>
+          <h5 class="empty-state-title">No Evaluations Submitted Yet</h5>
+          <p class="empty-state-text">You have not submitted any course or faculty evaluations this semester. Your honest feedback helps improve academic quality.</p>
+          <a href="{{ url_for('student.submit_feedback') }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-pencil-square me-1"></i> Submit Your First Feedback
+          </a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

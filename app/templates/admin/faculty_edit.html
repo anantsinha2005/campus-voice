@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Faculty - {{ faculty.faculty_name }} - Campus Voice{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-3">
+  <div class="col-12 col-md-8 col-lg-6">
+    <div class="card card-academic shadow-md">
+      <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0">
+          <i class="bi bi-pencil text-primary me-2"></i> Edit Faculty Member
+        </h5>
+        <a href="{{ url_for('admin.faculty_list') }}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-arrow-left"></i> Back to Faculty
+        </a>
+      </div>
+      <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('admin.faculty_edit', id=faculty.id) }}" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="mb-3">
+            <label for="faculty_name" class="form-label">{{ form.faculty_name.label.text }}</label>
+            {{ form.faculty_name(class="form-control" + (" is-invalid" if form.faculty_name.errors else ""), id="faculty_name") }}
+            {% for error in form.faculty_name.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="department" class="form-label">{{ form.department.label.text }}</label>
+            {{ form.department(class="form-select" + (" is-invalid" if form.department.errors else ""), id="department") }}
+            {% for error in form.department.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="email" class="form-label">{{ form.email.label.text }}</label>
+            {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), id="email") }}
+            {% for error in form.email.errors %}
+              <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+            <div class="form-text">Optional. Leave blank if official email is not yet available.</div>
+          </div>
+
+          <div class="form-check mb-4">
+            {{ form.is_active(class="form-check-input", id="is_active") }}
+            <label class="form-check-label" for="is_active">
+              Mark as Active (Available for student evaluations)
+            </label>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{{ url_for('admin.faculty_list') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Update Faculty Member</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

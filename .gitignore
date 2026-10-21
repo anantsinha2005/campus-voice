@@ -1,0 +1,98 @@
+# ==============================================================================
+# Campus Voice - Git Ignore Rules
+# ==============================================================================
+
+# --- Environment Variables & Secrets ---
+.env
+.env.local
+.env.*.local
+*.env
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+secrets/
+credentials.json
+
+# Allow .env.example template to be tracked
+!.env.example
+
+# --- Python Virtual Environments ---
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Python Bytecode & Cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Testing & Type Checking Cache ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# --- Database Files & Backups ---
+instance/*.db
+instance/*.sqlite
+instance/*.sqlite3
+instance/backups/
+backups/
+*.db
+*.sqlite
+*.sqlite3
+!instance/.gitkeep
+
+# --- Logs & Runtime Output ---
+*.log
+logs/
+*.pid
+*.seed
+
+# --- Cloud Deployment & Serverless Artifacts ---
+.vercel
+.vercel/
+.serverless/
+.output/
+
+# --- Operating System & Editor Metadata ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace

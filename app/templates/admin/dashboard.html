@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+
+{% block title %}Administrator Dashboard - Campus Voice{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+
+  <!-- Header Banner -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-danger text-uppercase px-2 py-1">Campus Voice &bull; Administrator Control Center</span>
+      </div>
+      <h2 class="fw-bold mb-1 text-dark">Institutional Quality &amp; Feedback Analytics</h2>
+      <p class="text-muted small mb-0">Overview of student ratings, faculty performance, and curriculum reviews.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{{ url_for('admin.faculty_list') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
+        <i class="bi bi-person-video3"></i> Manage Faculty
+      </a>
+      <a href="{{ url_for('admin.course_list') }}" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1">
+        <i class="bi bi-journal-bookmark"></i> Manage Courses
+      </a>
+      <a href="{{ url_for('admin.export_csv') }}" class="btn btn-success btn-sm d-flex align-items-center gap-1">
+        <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV Report
+      </a>
+    </div>
+  </div>
+
+  <!-- Key Performance Metric Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl">
+      <div class="stat-card">
+        <div class="stat-icon primary">
+          <i class="bi bi-people-fill"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ total_students }}</div>
+          <div class="stat-label">Registered Students</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl">
+      <div class="stat-card">
+        <div class="stat-icon success">
+          <i class="bi bi-journal-text"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ total_courses }}</div>
+          <div class="stat-label">Total Active Courses</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl">
+      <div class="stat-card">
+        <div class="stat-icon info">
+          <i class="bi bi-person-workspace"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ total_faculty }}</div>
+          <div class="stat-label">Total Faculty Members</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl">
+      <div class="stat-card">
+        <div class="stat-icon warning">
+          <i class="bi bi-chat-quote-fill"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ total_feedback }}</div>
+          <div class="stat-label">Total Feedback Submissions</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-sm-6 col-xl">
+      <div class="stat-card" style="border-left: 4px solid var(--star-color);">
+        <div class="stat-icon" style="background-color: #fef3c7; color: #d97706;">
+          <i class="bi bi-star-fill"></i>
+        </div>
+        <div>
+          <div class="stat-value">{{ overall_avg_rating }} <span class="fs-6 text-muted fw-normal">/ 5.0</span></div>
+          <div class="stat-label">Overall Average Rating</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics & Chart Visualizations -->
+  <div class="row g-4 mb-4">
+    
+    <!-- Rating Distribution Chart -->
+    <div class="col-12 col-lg-4">
+      <div class="card card-academic h-100">
+        <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+          <span class="d-flex align-items-center gap-2">
+            <i class="bi bi-pie-chart-fill text-primary"></i> Rating Breakdown (1 - 5 Stars)
+          </span>
+          <span class="badge bg-light text-dark border">Chart.js</span>
+        </div>
+        <div class="card-body d-flex flex-column justify-content-center align-items-center p-3" style="min-height: 300px;">
+          <div style="position: relative; width: 100%; height: 260px;">
+            <canvas id="ratingDistributionChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Faculty Ratings Benchmark Chart -->
+    <div class="col-12 col-lg-4">
+      <div class="card card-academic h-100">
+        <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+          <span class="d-flex align-items-center gap-2">
+            <i class="bi bi-bar-chart-line-fill text-indigo" style="color: #4f46e5;"></i> Faculty Rating Averages
+          </span>
+          <span class="badge bg-light text-dark border">Benchmark</span>
+        </div>
+        <div class="card-body p-3" style="min-height: 300px;">
+          <div style="position: relative; width: 100%; height: 260px;">
+            <canvas id="facultyRatingsChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Course Ratings Benchmark Chart -->
+    <div class="col-12 col-lg-4">
+      <div class="card card-academic h-100">
+        <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+          <span class="d-flex align-items-center gap-2">
+            <i class="bi bi-graph-up text-success"></i> Course Satisfaction Averages
+          </span>
+          <span class="badge bg-light text-dark border">Metrics</span>
+        </div>
+        <div class="card-body p-3" style="min-height: 300px;">
+          <div style="position: relative; width: 100%; height: 260px;">
+            <canvas id="courseRatingsChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Recent Feedback Table -->
+  <div class="card card-academic mb-4">
+    <div class="card-header card-header-academic d-flex justify-content-between align-items-center">
+      <span class="d-flex align-items-center gap-2">
+        <i class="bi bi-chat-left-quote text-primary"></i> Recent Feedback Submissions
+      </span>
+      <a href="{{ url_for('admin.feedback_list') }}" class="btn btn-outline-secondary btn-sm">
+        View All &amp; Filter ({{ total_feedback }})
+      </a>
+    </div>
+    <div class="card-body p-0">
+      {% if recent_feedbacks %}
+        <div class="table-responsive">
+          <table class="table table-academic mb-0">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Student</th>
+                <th>Course</th>
+                <th>Faculty</th>
+                <th>Rating</th>
+                <th>Comments</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fb in recent_feedbacks %}
+                <tr>
+                  <td class="text-nowrap text-muted small">
+                    {{ fb.created_at.strftime('%Y-%m-%d %H:%M') }}
+                  </td>
+                  <td>
+                    <strong>{{ fb.student.name if fb.student else 'Unknown' }}</strong><br>
+                    <span class="text-muted small">{{ fb.student.student_id if fb.student else 'N/A' }}</span>
+                  </td>
+                  <td>
+                    <span class="badge bg-primary-subtle text-primary fw-bold">{{ fb.course.course_code }}</span><br>
+                    <span class="text-muted small">{{ fb.course.course_name }}</span>
+                  </td>
+                  <td>
+                    <strong>{{ fb.faculty.faculty_name }}</strong><br>
+                    <span class="text-muted small">{{ fb.faculty.department }}</span>
+                  </td>
+                  <td>
+                    <span class="badge-rating badge-rating-{{ fb.rating }}">
+                      <span>{{ fb.rating }}★</span>
+                    </span>
+                    <div class="small text-muted fw-semibold">{{ fb.rating_label }}</div>
+                  </td>
+                  <td>
+                    <span class="text-dark small">{{ fb.comments|truncate(110) if fb.comments else '<span class="text-muted fst-italic">No written comments</span>'|safe }}</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <i class="bi bi-chat-square-dots empty-state-icon"></i>
+          <h5 class="empty-state-title">No Feedback Submissions Recorded</h5>
+          <p class="empty-state-text">No student submissions exist in the database yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block title %}Student Registration - Campus Voice{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-4">
+  <div class="col-12 col-md-10 col-lg-7 col-xl-6">
+    
+    <div class="card card-academic shadow-md border-0">
+      <div class="card-body p-4 p-md-5">
+        
+        <div class="text-center mb-4">
+          <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success bg-opacity-10 text-success p-3 mb-3">
+            <i class="bi bi-person-plus-fill fs-2"></i>
+          </div>
+          <h3 class="fw-bold text-dark">Student Registration</h3>
+          <p class="text-muted small">Create your Campus Voice account to submit course and faculty evaluations</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('auth.register') }}" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="row g-3">
+            <!-- Full Name -->
+            <div class="col-md-6">
+              <label for="name" class="form-label">
+                <i class="bi bi-person me-1 text-muted"></i> {{ form.name.label.text }}
+              </label>
+              {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""), placeholder="e.g. Jane Smith", id="name", autofocus=True) }}
+              {% for error in form.name.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Student ID -->
+            <div class="col-md-6">
+              <label for="student_id" class="form-label">
+                <i class="bi bi-card-heading me-1 text-muted"></i> {{ form.student_id.label.text }}
+              </label>
+              {{ form.student_id(class="form-control" + (" is-invalid" if form.student_id.errors else ""), placeholder="e.g. CS-2024-0042", id="student_id") }}
+              {% for error in form.student_id.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Email -->
+            <div class="col-md-6">
+              <label for="email" class="form-label">
+                <i class="bi bi-envelope me-1 text-muted"></i> {{ form.email.label.text }}
+              </label>
+              {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), placeholder="jane.smith@student.university.edu", id="email") }}
+              {% for error in form.email.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Department -->
+            <div class="col-md-6">
+              <label for="department" class="form-label">
+                <i class="bi bi-building me-1 text-muted"></i> {{ form.department.label.text }}
+              </label>
+              {{ form.department(class="form-select" + (" is-invalid" if form.department.errors else ""), id="department") }}
+              {% for error in form.department.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Password -->
+            <div class="col-md-6">
+              <label for="password" class="form-label">
+                <i class="bi bi-lock me-1 text-muted"></i> {{ form.password.label.text }}
+              </label>
+              {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else ""), placeholder="Minimum 8 characters", id="password") }}
+              {% for error in form.password.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Confirm Password -->
+            <div class="col-md-6">
+              <label for="confirm_password" class="form-label">
+                <i class="bi bi-shield-check me-1 text-muted"></i> {{ form.confirm_password.label.text }}
+              </label>
+              {{ form.confirm_password(class="form-control" + (" is-invalid" if form.confirm_password.errors else ""), placeholder="Re-enter password", id="confirm_password") }}
+              {% for error in form.confirm_password.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <button type="submit" class="btn btn-primary w-100 py-2 d-flex align-items-center justify-content-center gap-2">
+              <i class="bi bi-check2-circle"></i> Create Student Account
+            </button>
+          </div>
+        </form>
+
+        <div class="text-center mt-4 pt-3 border-top">
+          <p class="text-muted small mb-0">
+            Already registered with an academic account?
+            <a href="{{ url_for('auth.login') }}" class="text-primary fw-semibold text-decoration-none">
+              Sign In here
+            </a>
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
