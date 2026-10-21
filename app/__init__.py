@@ -1,6 +1,7 @@
 from flask import Flask, redirect, url_for, render_template
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect
+from sqlalchemy import text
 from app.config import Config
 from app.models import db, User
 
@@ -26,7 +27,11 @@ def create_app(config_class=Config):
 
     @login_manager.user_loader
     def load_user(user_id):
-        return db.session.get(User, int(user_id))
+        try:
+            return db.session.get(User, int(user_id))
+        except Exception as e:
+            app.logger.warning(f"user_loader failed: {e}")
+            return None
 
     # Register Blueprints
     from app.routes.auth import auth_bp
@@ -50,7 +55,23 @@ def create_app(config_class=Config):
     @app.route('/health')
     @app.route('/healthz')
     def health_check():
-        return {'status': 'healthy', 'service': 'Campus Voice'}, 200
+        db_status = "connected"
+        status_code = 200
+        try:
+            db.session.execute(text("SELECT 1"))
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+            status_code = 503
+
+        db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        db_scheme = db_uri.split('://')[0] if '://' in db_uri else 'unknown'
+
+        return {
+            'status': 'healthy' if status_code == 200 else 'unhealthy',
+            'service': 'Campus Voice',
+            'database': db_status,
+            'database_scheme': db_scheme
+        }, status_code
 
     # Error Handlers
     @app.errorhandler(403)
@@ -64,6 +85,7 @@ def create_app(config_class=Config):
     @app.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
+        app.logger.error(f"500 Internal Server Error: {error}", exc_info=True)
         return render_template('errors/500.html'), 500
 
     # Custom Jinja Template Filters
@@ -77,5 +99,16 @@ def create_app(config_class=Config):
             return full + empty
         except (ValueError, TypeError):
             return '☆☆☆☆☆'
+
+    # Auto-create tables if missing (ensures serverless / new environments don't crash with 500)
+    with app.app_context():
+        try:
+            db.create_all()
+            from app.models import Course
+            if Course.query.count() == 0:
+                from seed_data import seed_database
+                seed_database(app)
+        except Exception as exc:
+            app.logger.warning(f"Database schema auto-check: {exc}")
 
     return app
