@@ -1,4 +1,6 @@
-# 🎓 Student Feedback Management System (EduFeedback Portal)
+# 🎓 Campus Voice
+
+> **Student Feedback Management System**
 
 A responsive, production-ready, full-stack web application designed for academic institutions to collect, analyze, and manage student feedback on courses and faculty members. Built with Python Flask, SQLite, Flask-SQLAlchemy, Flask-Login, Bootstrap 5, and Chart.js.
 
