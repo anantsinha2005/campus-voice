@@ -225,7 +225,8 @@ FLASK_APP=run.py
 FLASK_ENV=development
 FLASK_DEBUG=false
 SECRET_KEY=replace-with-a-very-long-random-secret-key-32chars
-DATABASE_URL=sqlite:///feedback.db
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/campus_voice?retryWrites=true&w=majority
+MONGODB_DB_NAME=campus_voice
 ADMIN_PASSWORD=YourStrongAdminPassword2026!
 SESSION_COOKIE_SECURE=false
 ```

@@ -1,10 +1,15 @@
+"""
+Seed script for Campus Voice - Student Feedback & Academic Quality System.
+Populates academic faculty, courses, and the initial administrator account in MongoDB.
+Strictly requires ADMIN_PASSWORD to be provided via environment variables.
+Does NOT create dummy reviews or dummy students.
+"""
 import os
-import secrets
-from datetime import datetime, timedelta
+import sys
 from app import create_app
 from app.config import Config
-from app.models import db, User, Course, Faculty, Feedback
-
+from app.models import User, Course, Faculty
+from app.db import get_db, init_indexes
 
 REAL_CATALOG = [
     ("BCO017A", "Formal Languages and Automation Theory", "Gajanand Sharma"),
@@ -19,42 +24,47 @@ REAL_CATALOG = [
 def seed_database(app=None):
     """
     Seeds initial administrator, academic courses, faculty members,
-    and the real academic catalog if not present.
-    Does NOT seed outdated demo entries or dummy students.
+    and the real academic catalog if not present in MongoDB.
+    Strictly requires ADMIN_PASSWORD environment variable for administrator provisioning.
     """
     if app is None:
         app = create_app()
 
     with app.app_context():
-        db.create_all()
+        db = get_db()
+        init_indexes(db)
 
-        print("[INFO] Initializing Student Feedback System database...")
+        print("[INFO] Initializing Campus Voice MongoDB database...")
 
-        # 1. Create Initial Administrator Account (deterministic fallback)
-        admin = User.query.filter_by(role='admin').first()
+        # 1. Create Initial Administrator Account (strictly requires ADMIN_PASSWORD)
+        admin = User.all(filter_dict={'role': 'admin'})
         if not admin:
-            admin_pwd = Config.ADMIN_PASSWORD or os.environ.get('ADMIN_PASSWORD') or 'AdminSecure2026!'
-            admin = User(
-                name=Config.ADMIN_NAME,
-                email=Config.ADMIN_EMAIL.lower().strip(),
-                department=Config.ADMIN_DEPARTMENT,
+            admin_pwd = (app.config.get('ADMIN_PASSWORD') if app else None) or os.environ.get('ADMIN_PASSWORD')
+            if not admin_pwd or not str(admin_pwd).strip():
+                raise ValueError(
+                    "ADMIN_PASSWORD environment variable must be set to provision the initial administrator. "
+                    "Refusing to create administrator with fallback or default password."
+                )
+
+            admin_user = User(
+                name=app.config.get('ADMIN_NAME', Config.ADMIN_NAME),
+                email=app.config.get('ADMIN_EMAIL', Config.ADMIN_EMAIL).lower().strip(),
+                department=app.config.get('ADMIN_DEPARTMENT', Config.ADMIN_DEPARTMENT),
                 student_id=None,
                 role='admin',
                 is_active=True
             )
-            admin.set_password(admin_pwd)
-            db.session.add(admin)
-            print(f"[+] Created initial admin account: {admin.email}")
+            admin_user.set_password(str(admin_pwd).strip())
+            admin_user.save()
+            print(f"[+] Created initial admin account: {admin_user.email}")
         else:
-            print(f"[*] Admin account already exists: {admin.email}")
+            print(f"[*] Admin account already exists: {admin[0].email}")
 
         # 2. Seed Real Faculty Members & Courses
         faculty_map = {}
-        course_map = {}
-
         for code, name, faculty_name in REAL_CATALOG:
             # Faculty
-            fac = Faculty.query.filter_by(faculty_name=faculty_name).first()
+            fac = Faculty.find_by_name(faculty_name)
             if not fac:
                 fac = Faculty(
                     faculty_name=faculty_name,
@@ -62,15 +72,15 @@ def seed_database(app=None):
                     email=None,
                     is_active=True
                 )
-                db.session.add(fac)
-                db.session.flush()
+                fac.save()
                 print(f"[+] Added faculty: {faculty_name}")
             else:
                 fac.is_active = True
+                fac.save()
             faculty_map[faculty_name] = fac
 
             # Course
-            crs = Course.query.filter_by(course_code=code).first()
+            crs = Course.find_by_code(code)
             if not crs:
                 crs = Course(
                     course_code=code,
@@ -79,17 +89,15 @@ def seed_database(app=None):
                     faculty_id=fac.id,
                     is_active=True
                 )
-                db.session.add(crs)
-                db.session.flush()
+                crs.save()
                 print(f"[+] Added course: {code} - {name}")
             else:
                 crs.course_name = name
                 crs.faculty_id = fac.id
                 crs.is_active = True
-            course_map[code] = crs
+                crs.save()
 
-        db.session.commit()
-        print("[SUCCESS] Database initialized and verified with real catalog (No dummy records seeded)!")
+        print("[SUCCESS] MongoDB initialized and verified with real catalog (No dummy records seeded)!")
 
 
 if __name__ == '__main__':

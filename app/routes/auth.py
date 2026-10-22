@@ -1,7 +1,12 @@
+"""
+Authentication routes for Campus Voice.
+Handles Student and Administrator login, Student registration, and logout using MongoDB.
+"""
 from urllib.parse import urlparse
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_user, logout_user, current_user, login_required
-from app.models import db, User
+from pymongo.errors import DuplicateKeyError
+from app.models import User
 from app.forms import LoginForm, StudentRegistrationForm
 
 auth_bp = Blueprint('auth', __name__)
@@ -27,19 +32,17 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         normalized_email = form.email.data.strip().lower()
-        db_uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', '')
-        db_scheme = db_uri.split('://')[0] if '://' in db_uri else 'unknown'
-        current_app.logger.info(f"[AUTH] Login attempt for email: {normalized_email} (DB scheme: {db_scheme})")
+        current_app.logger.info(f"[AUTH] Login attempt for email: {normalized_email}")
 
         try:
-            user = User.query.filter_by(email=normalized_email).first()
+            user = User.find_by_email(normalized_email)
         except Exception as exc:
-            current_app.logger.error(f"[AUTH ERROR] Database exception during lookup for email '{normalized_email}': {exc}")
+            current_app.logger.error(f"[AUTH ERROR] Database exception during lookup for '{normalized_email}': {exc}")
             flash("A database connection error occurred. Please try again.", "danger")
             return render_template('auth/login.html', form=form)
 
         if not user:
-            current_app.logger.warning(f"[AUTH] Login rejected: No user record found in current database for email: {normalized_email}")
+            current_app.logger.warning(f"[AUTH] Login rejected: No user record found for email: {normalized_email}")
             flash("Invalid email address or password. Please check your credentials.", "danger")
             return render_template('auth/login.html', form=form)
 
@@ -71,7 +74,7 @@ def login():
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
     """
-    Registers a new student. 
+    Registers a new student.
     Role is strictly hardcoded to 'student' to prevent privilege escalation.
     """
     if current_user.is_authenticated:
@@ -83,7 +86,7 @@ def register():
     if form.validate_on_submit():
         normalized_email = form.email.data.strip().lower()
         normalized_student_id = form.student_id.data.strip().upper()
-        
+
         current_app.logger.info(f"[AUTH] Student registration attempt: {normalized_email} ({normalized_student_id})")
 
         user = User(
@@ -95,15 +98,16 @@ def register():
             is_active=True
         )
         user.set_password(form.password.data)
-        
+
         try:
-            db.session.add(user)
-            db.session.commit()
+            user.save()
             current_app.logger.info(f"[AUTH] Student registered successfully: ID {user.id} ({normalized_email})")
             flash("Your student account has been created successfully! You can now log in.", "success")
             return redirect(url_for('auth.login'))
+        except DuplicateKeyError:
+            flash("An account with this email or student ID already exists. Please log in instead.", "warning")
+            return render_template('auth/register.html', form=form)
         except Exception as e:
-            db.session.rollback()
             current_app.logger.error(f"[AUTH ERROR] Registration failed for {normalized_email}: {e}")
             flash("An error occurred during registration. Please try again.", "danger")
 

@@ -1,9 +1,13 @@
+"""
+Application Factory for Campus Voice - Student Feedback & Academic Quality System.
+Uses PyMongo with MongoDB Atlas and Flask-Login.
+"""
 from flask import Flask, redirect, url_for, render_template
 from flask_login import LoginManager, current_user
 from flask_wtf.csrf import CSRFProtect
-from sqlalchemy import text
 from app.config import Config
-from app.models import db, User
+from app.models import User
+from app.db import get_db, init_indexes, ping_db
 
 login_manager = LoginManager()
 csrf = CSRFProtect()
@@ -17,7 +21,6 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # Initialize extensions
-    db.init_app(app)
     csrf.init_app(app)
     
     login_manager.init_app(app)
@@ -28,9 +31,9 @@ def create_app(config_class=Config):
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            user = db.session.get(User, int(user_id))
+            user = User.get_by_id(user_id)
             if user is None:
-                app.logger.warning(f"[SESSION] User loader: User ID {user_id} not found in current database instance.")
+                app.logger.warning(f"[SESSION] User loader: User ID {user_id} not found in MongoDB.")
             return user
         except Exception as e:
             app.logger.error(f"[SESSION ERROR] User loader failed for ID {user_id}: {e}")
@@ -58,22 +61,13 @@ def create_app(config_class=Config):
     @app.route('/health')
     @app.route('/healthz')
     def health_check():
-        db_status = "connected"
-        status_code = 200
-        try:
-            db.session.execute(text("SELECT 1"))
-        except Exception as e:
-            db_status = f"error: {str(e)}"
-            status_code = 503
-
-        db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-        db_scheme = db_uri.split('://')[0] if '://' in db_uri else 'unknown'
-
+        is_healthy = ping_db()
+        status_code = 200 if is_healthy else 503
         return {
-            'status': 'healthy' if status_code == 200 else 'unhealthy',
+            'status': 'healthy' if is_healthy else 'unhealthy',
             'service': 'Campus Voice',
-            'database': db_status,
-            'database_scheme': db_scheme
+            'database': 'connected' if is_healthy else 'disconnected',
+            'database_engine': 'MongoDB Atlas'
         }, status_code
 
     # Error Handlers
@@ -87,7 +81,6 @@ def create_app(config_class=Config):
 
     @app.errorhandler(500)
     def internal_error(error):
-        db.session.rollback()
         app.logger.error(f"500 Internal Server Error: {error}", exc_info=True)
         return render_template('errors/500.html'), 500
 
@@ -103,15 +96,11 @@ def create_app(config_class=Config):
         except (ValueError, TypeError):
             return '☆☆☆☆☆'
 
-    # Auto-create tables if missing (ensures serverless / new environments don't crash with 500)
+    # Safe index initialization (ensures unique constraints exist in MongoDB)
     with app.app_context():
         try:
-            db.create_all()
-            from app.models import Course
-            if Course.query.count() == 0:
-                from seed_data import seed_database
-                seed_database(app)
+            init_indexes(get_db())
         except Exception as exc:
-            app.logger.warning(f"Database schema auto-check: {exc}")
+            app.logger.warning(f"MongoDB index auto-initialization: {exc}")
 
     return app

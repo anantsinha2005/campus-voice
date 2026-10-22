@@ -1,5 +1,11 @@
+"""
+Administrator portal routes for Campus Voice.
+Handles Analytics Dashboard, Faculty CRUD, Course CRUD, Student Directory,
+Searchable/Filterable Feedback Auditing, and CSV Export using MongoDB.
+"""
 import csv
 import io
+import re
 from datetime import datetime
 from flask import (
     Blueprint,
@@ -9,10 +15,11 @@ from flask import (
     flash,
     request,
     jsonify,
-    Response
+    Response,
+    abort
 )
-from sqlalchemy import func
-from app.models import db, User, Course, Faculty, Feedback
+from app.db import get_db
+from app.models import User, Course, Faculty, Feedback
 from app.forms import FacultyForm, CourseForm
 from app.decorators import admin_required
 
@@ -26,26 +33,37 @@ def dashboard():
     Administrator dashboard with key metrics, ratings distribution,
     faculty/course performance benchmarks, and recent feedback.
     """
-    total_students = User.query.filter_by(role='student').count()
-    total_courses = Course.query.filter_by(is_active=True).count()
-    total_faculty = Faculty.query.filter_by(is_active=True).count()
-    total_feedback = Feedback.query.count()
+    db = get_db()
+    total_students = User.count({'role': 'student'})
+    total_courses = Course.count({'is_active': True})
+    total_faculty = Faculty.count({'is_active': True})
+    total_feedback = Feedback.count()
 
-    # Overall institution average rating
-    avg_rating_query = db.session.query(func.avg(Feedback.rating)).scalar()
-    overall_avg_rating = round(avg_rating_query, 2) if avg_rating_query else 0.0
+    # Overall institution average rating via MongoDB aggregation
+    avg_pipeline = [{"$group": {"_id": None, "avg_rating": {"$avg": "$rating"}}}]
+    try:
+        avg_result = list(db.feedbacks.aggregate(avg_pipeline))
+        overall_avg_rating = round(avg_result[0]["avg_rating"], 2) if avg_result and avg_result[0].get("avg_rating") is not None else 0.0
+    except Exception:
+        all_fb = Feedback.find()
+        overall_avg_rating = round(sum(f.rating for f in all_fb) / len(all_fb), 2) if all_fb else 0.0
 
     # Rating distribution (1 to 5 stars)
     rating_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-    dist_query = db.session.query(
-        Feedback.rating, func.count(Feedback.id)
-    ).group_by(Feedback.rating).all()
-    for r, count in dist_query:
-        if r in rating_counts:
-            rating_counts[r] = count
+    try:
+        dist_pipeline = [{"$group": {"_id": "$rating", "count": {"$sum": 1}}}]
+        for doc in db.feedbacks.aggregate(dist_pipeline):
+            r = doc.get("_id")
+            if r in rating_counts:
+                rating_counts[r] = doc.get("count", 0)
+    except Exception:
+        all_fb = Feedback.find()
+        for fb in all_fb:
+            if fb.rating in rating_counts:
+                rating_counts[fb.rating] += 1
 
     # Faculty ratings breakdown (average rating & count)
-    faculties = Faculty.query.all()
+    faculties = Faculty.all(sort_field='faculty_name')
     faculty_stats = []
     for f in faculties:
         feedbacks = f.feedbacks.all()
@@ -60,7 +78,7 @@ def dashboard():
         })
 
     # Course ratings breakdown (average rating & count)
-    courses = Course.query.all()
+    courses = Course.all(sort_field='course_code')
     course_stats = []
     for c in courses:
         feedbacks = c.feedbacks.all()
@@ -76,9 +94,7 @@ def dashboard():
         })
 
     # Recent feedback submissions
-    recent_feedbacks = Feedback.query.order_by(
-        Feedback.created_at.desc()
-    ).limit(8).all()
+    recent_feedbacks = Feedback.find(sort=[('created_at', -1)], limit=8)
 
     return render_template(
         'admin/dashboard.html',
@@ -100,17 +116,21 @@ def analytics_data():
     """
     API endpoint returning structured analytics data for Chart.js.
     """
-    # Distribution of ratings
+    db = get_db()
     rating_counts = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-    dist_query = db.session.query(
-        Feedback.rating, func.count(Feedback.id)
-    ).group_by(Feedback.rating).all()
-    for r, count in dist_query:
-        if r in rating_counts:
-            rating_counts[r] = count
+    try:
+        dist_pipeline = [{"$group": {"_id": "$rating", "count": {"$sum": 1}}}]
+        for doc in db.feedbacks.aggregate(dist_pipeline):
+            r = doc.get("_id")
+            if r in rating_counts:
+                rating_counts[r] = doc.get("count", 0)
+    except Exception:
+        for fb in Feedback.find():
+            if fb.rating in rating_counts:
+                rating_counts[fb.rating] += 1
 
     # Top faculty by feedback count and rating
-    faculties = Faculty.query.all()
+    faculties = Faculty.all(sort_field='faculty_name')
     faculty_labels = []
     faculty_averages = []
     for f in faculties:
@@ -120,7 +140,7 @@ def analytics_data():
             faculty_averages.append(round(sum(fb.rating for fb in feedbacks) / len(feedbacks), 2))
 
     # Top courses by rating
-    courses = Course.query.all()
+    courses = Course.all(sort_field='course_code')
     course_labels = []
     course_averages = []
     for c in courses:
@@ -159,23 +179,24 @@ def faculty_list():
             is_active=form.is_active.data
         )
         try:
-            db.session.add(faculty)
-            db.session.commit()
+            faculty.save()
             flash(f"Faculty member '{faculty.faculty_name}' has been added successfully.", "success")
             return redirect(url_for('admin.faculty_list'))
         except Exception:
-            db.session.rollback()
             flash("An error occurred while creating the faculty record.", "danger")
 
-    faculties = Faculty.query.order_by(Faculty.faculty_name).all()
+    faculties = Faculty.all(sort_field='faculty_name')
     return render_template('admin/faculty.html', faculties=faculties, form=form)
 
 
-@admin_bp.route('/faculty/<int:id>/edit', methods=['GET', 'POST'])
+@admin_bp.route('/faculty/<string:id>/edit', methods=['GET', 'POST'])
 @admin_required
 def faculty_edit(id):
     """Edits an existing faculty member."""
-    faculty = db.get_or_404(Faculty, id)
+    faculty = Faculty.get_by_id(id)
+    if not faculty:
+        abort(404)
+
     form = FacultyForm(original_id=faculty.id, obj=faculty)
 
     if form.validate_on_submit():
@@ -186,23 +207,25 @@ def faculty_edit(id):
         faculty.is_active = form.is_active.data
 
         try:
-            db.session.commit()
+            faculty.save()
             flash(f"Faculty member '{faculty.faculty_name}' updated successfully.", "success")
             return redirect(url_for('admin.faculty_list'))
         except Exception:
-            db.session.rollback()
             flash("Failed to update faculty member details.", "danger")
 
     return render_template('admin/faculty_edit.html', form=form, faculty=faculty)
 
 
-@admin_bp.route('/faculty/<int:id>/toggle', methods=['POST'])
+@admin_bp.route('/faculty/<string:id>/toggle', methods=['POST'])
 @admin_required
 def faculty_toggle(id):
     """Toggles faculty active / inactive status."""
-    faculty = db.get_or_404(Faculty, id)
+    faculty = Faculty.get_by_id(id)
+    if not faculty:
+        abort(404)
+
     faculty.is_active = not faculty.is_active
-    db.session.commit()
+    faculty.save()
     status = "activated" if faculty.is_active else "deactivated"
     flash(f"Faculty member '{faculty.faculty_name}' has been {status}.", "info")
     return redirect(url_for('admin.faculty_list'))
@@ -216,13 +239,13 @@ def faculty_toggle(id):
 def course_list():
     """Lists all courses and processes addition of new courses."""
     form = CourseForm()
-    faculties = Faculty.query.filter_by(is_active=True).order_by(Faculty.faculty_name).all()
-    form.faculty_id.choices = [(0, '-- None / Unassigned --')] + [
+    faculties = Faculty.all({'is_active': True}, sort_field='faculty_name')
+    form.faculty_id.choices = [('', '-- None / Unassigned --')] + [
         (f.id, f"{f.faculty_name} ({f.department})") for f in faculties
     ]
 
     if form.validate_on_submit():
-        faculty_id_val = form.faculty_id.data if form.faculty_id.data and form.faculty_id.data > 0 else None
+        faculty_id_val = form.faculty_id.data if form.faculty_id.data and form.faculty_id.data.strip() else None
         course = Course(
             course_name=form.course_name.data.strip(),
             course_code=form.course_code.data.strip().upper(),
@@ -231,57 +254,60 @@ def course_list():
             is_active=form.is_active.data
         )
         try:
-            db.session.add(course)
-            db.session.commit()
+            course.save()
             flash(f"Course '{course.course_code}: {course.course_name}' created successfully.", "success")
             return redirect(url_for('admin.course_list'))
         except Exception:
-            db.session.rollback()
             flash("An error occurred while adding the course.", "danger")
 
-    courses = Course.query.order_by(Course.course_code).all()
+    courses = Course.all(sort_field='course_code')
     return render_template('admin/courses.html', courses=courses, form=form)
 
 
-@admin_bp.route('/courses/<int:id>/edit', methods=['GET', 'POST'])
+@admin_bp.route('/courses/<string:id>/edit', methods=['GET', 'POST'])
 @admin_required
 def course_edit(id):
     """Edits an existing course."""
-    course = db.get_or_404(Course, id)
+    course = Course.get_by_id(id)
+    if not course:
+        abort(404)
+
     form = CourseForm(original_id=course.id, obj=course)
-    faculties = Faculty.query.filter_by(is_active=True).order_by(Faculty.faculty_name).all()
-    form.faculty_id.choices = [(0, '-- None / Unassigned --')] + [
+    faculties = Faculty.all({'is_active': True}, sort_field='faculty_name')
+    form.faculty_id.choices = [('', '-- None / Unassigned --')] + [
         (f.id, f"{f.faculty_name} ({f.department})") for f in faculties
     ]
 
     if request.method == 'GET':
-        form.faculty_id.data = course.faculty_id if course.faculty_id else 0
+        form.faculty_id.data = course.faculty_id or ''
 
     if form.validate_on_submit():
         course.course_name = form.course_name.data.strip()
         course.course_code = form.course_code.data.strip().upper()
         course.department = form.department.data
-        course.faculty_id = form.faculty_id.data if form.faculty_id.data and form.faculty_id.data > 0 else None
+        course.faculty_id = form.faculty_id.data if form.faculty_id.data and form.faculty_id.data.strip() else None
         course.is_active = form.is_active.data
 
         try:
-            db.session.commit()
+            course.save()
             flash(f"Course '{course.course_code}' updated successfully.", "success")
             return redirect(url_for('admin.course_list'))
         except Exception:
-            db.session.rollback()
             flash("Failed to update course details.", "danger")
 
     return render_template('admin/course_edit.html', form=form, course=course)
 
 
-@admin_bp.route('/courses/<int:id>/toggle', methods=['POST'])
+@admin_bp.route('/courses/<string:id>/toggle', methods=['POST'])
 @admin_required
 def course_toggle(id):
     """Toggles course active / inactive status."""
-    course = db.get_or_404(Course, id)
+    course = Course.get_by_id(id)
+    if not course:
+        abort(404)
+
     course.is_active = not course.is_active
-    db.session.commit()
+    course.save()
     status = "activated" if course.is_active else "deactivated"
     flash(f"Course '{course.course_code}' has been {status}.", "info")
     return redirect(url_for('admin.course_list'))
@@ -294,7 +320,7 @@ def course_toggle(id):
 @admin_required
 def student_list():
     """Lists registered students with feedback statistics."""
-    students = User.query.filter_by(role='student').order_by(User.created_at.desc()).all()
+    students = User.all(filter_dict={'role': 'student'}, sort_field='created_at', sort_dir=-1)
     return render_template('admin/students.html', students=students)
 
 
@@ -302,50 +328,91 @@ def student_list():
 # FEEDBACK REVIEW & SEARCH/FILTER
 # -------------------------------------------------------------
 def get_filtered_feedback_query():
-    """Constructs dynamic SQLAlchemy query based on GET parameters."""
-    query = Feedback.query.join(Feedback.student).join(Feedback.course).join(Feedback.faculty)
+    """Constructs dynamic MongoDB query filter based on GET parameters."""
+    query = {}
 
-    course_id = request.args.get('course_id', type=int)
-    faculty_id = request.args.get('faculty_id', type=int)
+    course_id = request.args.get('course_id')
+    faculty_id = request.args.get('faculty_id')
     rating = request.args.get('rating', type=int)
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
     search = request.args.get('search', '').strip()
 
-    if course_id:
-        query = query.filter(Feedback.course_id == course_id)
-    if faculty_id:
-        query = query.filter(Feedback.faculty_id == faculty_id)
-    if rating:
-        query = query.filter(Feedback.rating == rating)
+    if course_id and course_id.strip():
+        # Match either string course_id or ObjectId representation
+        course_obj = Course.get_by_id(course_id)
+        if course_obj:
+            query["course_id"] = {"$in": [str(course_id), course_obj._id]}
+        else:
+            query["course_id"] = str(course_id)
 
+    if faculty_id and faculty_id.strip():
+        faculty_obj = Faculty.get_by_id(faculty_id)
+        if faculty_obj:
+            query["faculty_id"] = {"$in": [str(faculty_id), faculty_obj._id]}
+        else:
+            query["faculty_id"] = str(faculty_id)
+
+    if rating:
+        query["rating"] = int(rating)
+
+    created_at_filter = {}
     if date_from:
         try:
             start_date = datetime.strptime(date_from, '%Y-%m-%d')
-            query = query.filter(Feedback.created_at >= start_date)
+            created_at_filter["$gte"] = start_date
         except ValueError:
             pass
 
     if date_to:
         try:
-            # End of day
             end_date = datetime.strptime(date_to, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-            query = query.filter(Feedback.created_at <= end_date)
+            created_at_filter["$lte"] = end_date
         except ValueError:
             pass
 
-    if search:
-        search_pattern = f"%{search}%"
-        query = query.filter(
-            (Feedback.comments.ilike(search_pattern)) |
-            (User.name.ilike(search_pattern)) |
-            (User.student_id.ilike(search_pattern)) |
-            (Course.course_name.ilike(search_pattern)) |
-            (Course.course_code.ilike(search_pattern)) |
-            (Faculty.faculty_name.ilike(search_pattern))
-        )
+    if created_at_filter:
+        query["created_at"] = created_at_filter
 
-    return query.order_by(Feedback.created_at.desc())
+    if search:
+        # Cross-document keyword search across comments, students, courses, and faculties
+        matching_user_ids = []
+        for u in User.all({
+            "$or": [
+                {"name": {"$regex": re.escape(search), "$options": "i"}},
+                {"student_id": {"$regex": re.escape(search), "$options": "i"}}
+            ]
+        }):
+            matching_user_ids.extend([str(u.id), u._id])
+
+        matching_course_ids = []
+        for c in Course.all({
+            "$or": [
+                {"course_name": {"$regex": re.escape(search), "$options": "i"}},
+                {"course_code": {"$regex": re.escape(search), "$options": "i"}}
+            ]
+        }):
+            matching_course_ids.extend([str(c.id), c._id])
+
+        matching_faculty_ids = []
+        for f in Faculty.all({
+            "faculty_name": {"$regex": re.escape(search), "$options": "i"}
+        }):
+            matching_faculty_ids.extend([str(f.id), f._id])
+
+        search_or = [
+            {"comments": {"$regex": re.escape(search), "$options": "i"}}
+        ]
+        if matching_user_ids:
+            search_or.append({"student_id": {"$in": matching_user_ids}})
+        if matching_course_ids:
+            search_or.append({"course_id": {"$in": matching_course_ids}})
+        if matching_faculty_ids:
+            search_or.append({"faculty_id": {"$in": matching_faculty_ids}})
+
+        query["$or"] = search_or
+
+    return query
 
 
 @admin_bp.route('/feedback')
@@ -355,13 +422,13 @@ def feedback_list():
     Searchable, filterable, and paginated table of all submitted student feedback.
     Supports filtering by course, faculty, rating, date range, and keyword search.
     """
-    courses = Course.query.order_by(Course.course_name).all()
-    faculties = Faculty.query.order_by(Faculty.faculty_name).all()
+    courses = Course.all(sort_field='course_name')
+    faculties = Faculty.all(sort_field='faculty_name')
 
-    query = get_filtered_feedback_query()
-    
-    # Pre-calculate summary stats across all matching records (before pagination)
-    all_filtered = query.all()
+    filter_dict = get_filtered_feedback_query()
+
+    # Pre-calculate summary stats across all matching records
+    all_filtered = Feedback.find(filter_dict)
     total_count = len(all_filtered)
     filtered_avg = round(sum(f.rating for f in all_filtered) / total_count, 2) if total_count > 0 else 0.0
 
@@ -371,7 +438,12 @@ def feedback_list():
     if per_page not in (10, 25, 50, 100):
         per_page = 10
 
-    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    pagination = Feedback.paginate(
+        filter_dict=filter_dict,
+        page=page,
+        per_page=per_page,
+        sort=[('created_at', -1)]
+    )
     feedbacks = pagination.items
 
     return render_template(
@@ -392,7 +464,8 @@ def export_csv():
     """
     Exports filtered or complete feedback records to CSV.
     """
-    feedbacks = get_filtered_feedback_query().all()
+    filter_dict = get_filtered_feedback_query()
+    feedbacks = Feedback.find(filter_dict, sort=[('created_at', -1)])
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -414,16 +487,20 @@ def export_csv():
     ])
 
     for fb in feedbacks:
+        student = fb.student
+        course = fb.course
+        faculty = fb.faculty
+
         writer.writerow([
             fb.id,
             fb.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            fb.student.name if fb.student else 'Unknown',
-            fb.student.student_id if fb.student else 'N/A',
-            fb.student.department if fb.student else 'N/A',
-            fb.course.course_code if fb.course else 'N/A',
-            fb.course.course_name if fb.course else 'N/A',
-            fb.faculty.faculty_name if fb.faculty else 'N/A',
-            fb.faculty.department if fb.faculty else 'N/A',
+            student.name if student else 'Unknown',
+            student.student_id if student else 'N/A',
+            student.department if student else 'N/A',
+            course.course_code if course else 'N/A',
+            course.course_name if course else 'N/A',
+            faculty.faculty_name if faculty else 'N/A',
+            faculty.department if faculty else 'N/A',
             fb.rating,
             fb.comments if fb.comments else '',
             fb.rating_label

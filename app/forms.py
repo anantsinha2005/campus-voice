@@ -1,3 +1,7 @@
+"""
+WTForms definitions for Campus Voice.
+Adapted for MongoDB with string ObjectIds and PyMongo validation queries.
+"""
 from flask_wtf import FlaskForm
 from wtforms import (
     StringField,
@@ -74,21 +78,21 @@ class StudentRegistrationForm(FlaskForm):
 
     def validate_email(self, field):
         normalized_email = field.data.strip().lower()
-        if User.query.filter_by(email=normalized_email).first():
+        if User.find_by_email(normalized_email):
             raise ValidationError("This email address is already registered. Please log in instead.")
 
     def validate_student_id(self, field):
         normalized_id = field.data.strip().upper()
-        if User.query.filter_by(student_id=normalized_id).first():
+        if User.find_by_student_id(normalized_id):
             raise ValidationError("This Student ID is already registered in the system.")
 
 
 class FeedbackForm(FlaskForm):
     """Student feedback submission form."""
-    course_id = SelectField('Course', coerce=int, validators=[
+    course_id = SelectField('Course', coerce=str, validators=[
         DataRequired(message="Please select a course.")
     ])
-    faculty_id = SelectField('Faculty Member', coerce=int, validators=[
+    faculty_id = SelectField('Faculty Member', coerce=str, validators=[
         DataRequired(message="Please select a faculty member.")
     ])
     rating = RadioField(
@@ -127,13 +131,13 @@ class FacultyForm(FlaskForm):
 
     def __init__(self, original_id=None, *args, **kwargs):
         super(FacultyForm, self).__init__(*args, **kwargs)
-        self.original_id = original_id
+        self.original_id = str(original_id) if original_id else None
 
     def validate_email(self, field):
         if field.data and field.data.strip():
             normalized_email = field.data.strip().lower()
-            existing = Faculty.query.filter_by(email=normalized_email).first()
-            if existing and (self.original_id is None or existing.id != self.original_id):
+            existing = Faculty.find_by_email(normalized_email)
+            if existing and (self.original_id is None or str(existing.id) != self.original_id):
                 raise ValidationError("Another faculty member with this email already exists.")
 
 
@@ -150,7 +154,7 @@ class CourseForm(FlaskForm):
     department = SelectField('Department', choices=DEPARTMENT_CHOICES, validators=[
         DataRequired(message="Please select a department.")
     ])
-    faculty_id = SelectField('Assigned Faculty Member', coerce=int, validators=[
+    faculty_id = SelectField('Assigned Faculty Member', coerce=str, validators=[
         Optional()
     ])
     is_active = BooleanField('Active Status', default=True)
@@ -158,10 +162,10 @@ class CourseForm(FlaskForm):
 
     def __init__(self, original_id=None, *args, **kwargs):
         super(CourseForm, self).__init__(*args, **kwargs)
-        self.original_id = original_id
+        self.original_id = str(original_id) if original_id else None
 
     def validate_course_code(self, field):
         normalized_code = field.data.strip().upper()
-        existing = Course.query.filter_by(course_code=normalized_code).first()
-        if existing and (self.original_id is None or existing.id != self.original_id):
+        existing = Course.find_by_code(normalized_code)
+        if existing and (self.original_id is None or str(existing.id) != self.original_id):
             raise ValidationError("A course with this code already exists.")
